@@ -28,13 +28,11 @@ jobs:
           java-version: "21"
           cache: gradle
 
-      # ---- 必须添加 Python 3.10 用于 Chaquo 插件 ----
       - name: Set up Python 3.10
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
           cache: 'pip'   # 可选，如果项目有 requirements.txt 会缓存依赖
-      # -------------------------------------------------
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
