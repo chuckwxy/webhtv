@@ -93,6 +93,7 @@ public class PlayerManager implements ParseCallback {
     private boolean lutPipelinePrepareInProgress;
     private boolean pendingLutPreview;
     private boolean waitingLutBeforePlay;
+    private boolean playWhenReady = true;
     private boolean lutWarmupRecoveryActive;
     private boolean lutWarmupRefreshRequested;
     private boolean lutWarmupReloadPreviewPending;
@@ -304,6 +305,10 @@ public class PlayerManager implements ParseCallback {
 
     public String getDecodeText() {
         return engine.getDecodeText();
+    }
+
+    public boolean isHardDecode() {
+        return engine.isHard();
     }
 
     public String getPlayerText() {
@@ -522,6 +527,7 @@ public class PlayerManager implements ParseCallback {
         long position = getPosition();
         float speed = getSpeed();
         boolean repeat = isRepeatOne();
+        boolean wasPlayWhenReady = player.getPlayWhenReady();
         int decode = engine.getDecode();
         prepareSeq++;
         resetLutRuntimeState("switch_player", true);
@@ -536,7 +542,8 @@ public class PlayerManager implements ParseCallback {
         player = engine.getPlayer();
         callback.onPlayerRebuild(player);
         if (spec == null || spec.getUrl() == null) return;
-        setMediaItem();
+        this.playWhenReady = wasPlayWhenReady;
+        setMediaItem(Constant.TIMEOUT_PLAY);
         if (position > 0) seekTo(position);
         if (speed != 1f) setSpeed(speed);
         setRepeatOne(repeat);
@@ -567,7 +574,12 @@ public class PlayerManager implements ParseCallback {
     }
 
     public void start(PlaySpec spec, long timeout) {
+        start(spec, timeout, true);
+    }
+
+    public void start(PlaySpec spec, long timeout, boolean playWhenReady) {
         this.spec = spec;
+        this.playWhenReady = playWhenReady;
         retry = 0;
         exoFallbackTried = false;
         realtimeFallbackTried = false;
@@ -577,8 +589,13 @@ public class PlayerManager implements ParseCallback {
     }
 
     public void parse(String key, Result result, boolean useParse, MediaMetadata metadata) {
+        parse(key, result, useParse, metadata, true);
+    }
+
+    public void parse(String key, Result result, boolean useParse, MediaMetadata metadata, boolean playWhenReady) {
         stopParse();
         spec = PlaySpec.fromParse(result, key, metadata);
+        this.playWhenReady = playWhenReady;
         retry = 0;
         exoFallbackTried = false;
         realtimeFallbackTried = false;
@@ -593,6 +610,7 @@ public class PlayerManager implements ParseCallback {
     }
 
     public void setMediaItem() {
+        playWhenReady = player == null || player.getPlayWhenReady();
         setMediaItem(Constant.TIMEOUT_PLAY);
     }
 
@@ -631,7 +649,7 @@ public class PlayerManager implements ParseCallback {
         prepareLutPipeline();
         initTrack = false;
         waitingLutBeforePlay = false;
-        engine.start(spec.checkUa());
+        engine.start(spec.checkUa(), playWhenReady);
         App.post(runnable, timeout);
         if (notifyPrepare) callback.onPrepare();
     }
@@ -1084,7 +1102,7 @@ public class PlayerManager implements ParseCallback {
         if (headers != null) headers.remove(HttpHeaders.RANGE);
         if (spec != null) spec.setHeaders(headers);
         if (spec != null) spec.setUrl(url);
-        setMediaItem();
+        setMediaItem(Constant.TIMEOUT_PLAY);
     }
 
     @Override
@@ -1210,10 +1228,8 @@ public class PlayerManager implements ParseCallback {
             }
             if (action == PlayerEngine.ErrorAction.FATAL) {
                 callback.onError(engine.getErrorMessage(e));
-            } else if (++retry > 1) {
-                callback.onError(engine.getErrorMessage(e));
             } else {
-                toggleDecode();
+                callback.onError(engine.getErrorMessage(e));
             }
         }
     };
